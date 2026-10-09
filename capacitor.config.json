@@ -1,0 +1,11 @@
+{
+  "appId": "com.musicplayer.app",
+  "appName": "My Music Player",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https"
+  },
+  "android": {
+    "webContentsDebuggingEnabled": true
+  }
+}
