@@ -29,7 +29,6 @@ class MusicPlugin : Plugin() {
 
     @PluginMethod
     fun getLibrary(call: PluginCall) {
-        // Check and request permissions
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (!hasPermission(Manifest.permission.READ_MEDIA_AUDIO)) {
                 requestAllPermissions(call, "permissionCallback")
@@ -67,7 +66,30 @@ class MusicPlugin : Plugin() {
             MediaStore.Audio.Media.DATA,
             MediaStore.Audio.Media.ALBUM_ID
         )
-        // Only songs longer than 10 seconds
+
+        // Also query genres separately since they're in a different table
+        val genreMap = HashMap<Long, String>()
+        try {
+            val genreUri = MediaStore.Audio.Genres.EXTERNAL_CONTENT_URI
+            context.contentResolver.query(genreUri, arrayOf(MediaStore.Audio.Genres._ID, MediaStore.Audio.Genres.NAME), null, null, null)?.use { genreCursor ->
+                val genreIdCol = genreCursor.getColumnIndexOrThrow(MediaStore.Audio.Genres._ID)
+                val genreNameCol = genreCursor.getColumnIndexOrThrow(MediaStore.Audio.Genres.NAME)
+                while (genreCursor.moveToNext()) {
+                    val genreId = genreCursor.getLong(genreIdCol)
+                    val genreName = genreCursor.getString(genreNameCol) ?: "Unknown"
+                    val membersUri = MediaStore.Audio.Genres.Members.getContentUri("external", genreId)
+                    context.contentResolver.query(membersUri, arrayOf(MediaStore.Audio.Genres.Members.AUDIO_ID), null, null, null)?.use { membersCursor ->
+                        val audioIdCol = membersCursor.getColumnIndexOrThrow(MediaStore.Audio.Genres.Members.AUDIO_ID)
+                        while (membersCursor.moveToNext()) {
+                            genreMap[membersCursor.getLong(audioIdCol)] = genreName
+                        }
+                    }
+                }
+            }
+        } catch (_: Exception) {
+            // Genre query failed, continue without genres
+        }
+
         val selection = "${MediaStore.Audio.Media.DURATION} > ?"
         val selectionArgs = arrayOf("10000")
         val sortOrder = "${MediaStore.Audio.Media.TITLE} ASC"
@@ -94,6 +116,7 @@ class MusicPlugin : Plugin() {
                     song.put("duration", cursor.getLong(durationCol))
                     song.put("path", cursor.getString(dataCol) ?: "")
                     song.put("albumId", cursor.getLong(albumIdCol).toString())
+                    song.put("genre", genreMap[id] ?: "Unknown")
                     songs.put(song)
                 }
             }
